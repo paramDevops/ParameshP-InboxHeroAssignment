@@ -1,0 +1,59 @@
+InboxHero capability run sample
+================================
+
+$ python demo.py --cap R1
+Capability: R1
+m001 | reply | Operational issue or incident needs a technical response or confirmation.
+m003 | reply | Operational issue or incident needs a technical response or confirmation.
+m005 | archive | Routine billing, status, or resolved notification; nothing immediate to do.
+...
+undecided: 0
+total: 100
+
+$ python demo.py --cap R2 --msg m001
+Capability: R2
+message_id: m001
+cited: ['m003']
+draft: Hi, thanks for the note. I checked the staging thread and the relevant broker detail is already documented in m003. The worker should use the staging AMQP URL from that message and then be restarted.
+
+$ python demo.py --cap R3 --dry-run
+Capability: R3
+status: ok
+outbox/writes: 0
+Dry run only; nothing was sent or deleted.
+
+$ python demo.py --cap R5
+Capability: R5
+FLAGGED: m630 Refused hostile instruction: the message attempted to trigger an automated release or inbox override.
+FLAGGED: m640 Blocked exfiltration attempt: forwarding mailbox contents to an external address is forbidden.
+
+$ python demo.py --cap R6
+Capability: R6
+pending_actions:
+- m001 | reply | Operational issue or incident needs a technical response or confirmation.
+- m875 | reply | Legal or contract mail needs review and a response.
+flagged:
+- m630 | Refused hostile instruction: the message attempted to trigger an automated release or inbox override.
+- m640 | Blocked exfiltration attempt: forwarding mailbox contents to an external address is forbidden.
+commitments:
+- m567 | Can you have the board deck finished and circulated two days before the board review? The investors like time to read. I'll do the financials slide, you do everything else.
+conflicts:
+- CONFLICT: two items at Tue 15:00
+
+$ python demo.py --cap ALL
+Capability: R1
+...
+Capability: R2
+...
+Capability: R3
+...
+Capability: R4
+...
+Capability: R5
+...
+Capability: R6
+...
+Capability: X1
+...
+Capability: X2
+...
