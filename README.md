@@ -1,6 +1,5 @@
 # Public GitHub Repository
 https://github.com/paramDevops/ParameshP-InboxHeroAssignment
-
 # InboxHero Assignment Submission
 
 ## Student
@@ -77,6 +76,32 @@ The final report answers the assignment’s questions in the following way:
 4. Reversible vs irreversible classification: reversible actions remain passive and reviewable, while send/delete are gated for approval.
 5. Retrieval approach: thread-local citation and earlier-message grounding to keep replies anchored in actual evidence.
 6. Safety: hostile instructions are refused, user approval is required for irreversible actions, and preferences persist across runs.
+
+## Safety and architecture answers
+
+### 1. What did you refuse to automate?
+I refuse to automate any irreversible external send or destructive delete without an explicit approval gate. One example is a message that asks the assistant to forward mailbox contents to an external address or to trigger a release without review. In this project, the system deliberately does not act on that kind of message by itself because it is both exfiltration-sensitive and irreversible. The line is drawn at the action boundary: a message can influence a draft or a classification, but it cannot reach `send` or `delete` unless `run_capability()` and the approval checks explicitly allow it. That keeps the automation conservative and reviewable.
+
+### 2. Where does untrusted text enter your system?
+Untrusted text enters at the inbox boundary, when [inboxhero.py](inboxhero.py) loads the JSON mailbox through `load_messages()` and turns each message body into a Python dictionary. After that, all text is treated as untrusted data until it passes a narrow safety check. The architecture separates two zones:
+
+- the read-only text zone: `detect_hostile_messages()`, `classify_messages()`, `draft_reply()`, and dashboard generation all consume message text, but they never execute it;
+- the action zone: only `run_capability()` and the explicit `send`/`delete` writing paths can produce an irreversible effect, and they enforce a gate first.
+
+The essential property is that the message body is never interpreted as instructions to the program itself. It is only inspected, summarized, reasoned over, and converted into a decision record. An attacker would have to defeat the hostile-text filters in `detect_hostile_messages()`, bypass the approval gate in `run_capability()`, and produce a valid action payload that the system would still treat as legitimate. That is a much harder target than a single prompt injection line.
+
+### 3. Who is accountable when it sends the wrong thing?
+The human owner remains accountable for the final send decision, while the system helps make the failure traceable. The code keeps a record of every capability run in [trace.jsonl](trace.jsonl) via `_write_trace_event()`, and writes irreversible actions to the [outbox](outbox) directory via `_write_outbox_actions()`. A bad message can still be caused by a bad human approval or a poor decision, but the system preserves the evidence trail: timestamp, capability, event type, message id, action, and target. If a message is badly worded, factually wrong, or sent to the wrong person, the owner can review the trace and the exact outbox artifact to see which message, which approval step, and which run produced it. In other words, the system does not remove responsibility; it makes the failure auditable.
+
+### 4. Name your own machinery.
+The project does not use a framework; it builds its own equivalent of the common agentic pieces directly in Python.
+
+- Agents: the specialized logic functions in [inboxhero.py](inboxhero.py), such as `classify_messages()`, `detect_hostile_messages()`, `draft_reply()`, `generate_followups()`, and `generate_morning_digest()`, act like distinct agent roles because each one owns a specific reasoning step.
+- Tasks: the capability work in `run_capability()` and the full orchestration in `run_end_to_end()` represent the task layer. Each task performs one operational unit: classify, draft, gate, persist preferences, summarize, and export.
+- Crew: the coordination and sequencing is effectively done by `demo.py` and `run_end_to_end()`, which choose which task runs in what order and aggregate the results for the user.
+- Router: the CLI in [demo.py](demo.py) is the router. It reads the `--cap` argument and dispatches to the matching logic, including the `ALL` case.
+
+One thing a framework would have given us is a structured execution runtime with abstraction for orchestration, retries, and tool scheduling. I built that ourselves using plain Python functions and JSON artifacts, and for this assignment that helped more than it hurt because the problem is small, explicit, and safety-critical. A heavy framework would mostly add indirection and extra moving parts without increasing the trustworthiness of the system. In a small deterministic pipeline, explicit code is easier to audit and easier to reason about when you are controlling irreversible actions.
 
 ## How to run
 
